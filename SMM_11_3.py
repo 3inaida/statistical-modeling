@@ -6,7 +6,6 @@ from docx import Document
 import matplotlib.pyplot as plt
 
 
-# Параметры
 N = 10
 P = 0.351
 LAM = 1.35
@@ -18,12 +17,10 @@ pd.set_option('display.float_format', '{:.5f}'.format)
 np.set_printoptions(precision=5, suppress=True)
 
 
-# Теоретическое распределение
 def poisson_probabilities(max_k: int, lam: float) -> list[float]:
     return [np.exp(-lam) * lam**k / math.factorial(k) for k in range(max_k + 1)]
 
 
-# Генерация выборок
 def standard_method(probabilities: list[float], size: int) -> np.ndarray:
     np.random.seed(SEED)
     return np.searchsorted(np.cumsum(probabilities), np.random.random(size))
@@ -33,7 +30,6 @@ def scipy_method(lam: float, size: int) -> np.ndarray:
     return stats.poisson.rvs(lam, size=size, random_state=SEED + 1)
 
 
-# Построение статистического ряда
 def build_stat_table(
     sample: np.ndarray, probabilities: list[float], size: int
 ) -> pd.DataFrame:
@@ -49,7 +45,6 @@ def build_stat_table(
     )
 
 
-# Критерий Пирсона
 def chi_square_table(stat_table: pd.DataFrame, size: int) -> pd.DataFrame:
     data = stat_table[['w_i', 'p_i']].copy()
 
@@ -74,7 +69,6 @@ def chi_square_test(chi_table: pd.DataFrame, alpha: float):
     print(f'Вывод: {conclusion}')
 
 
-# Критерий однородности
 def uniformity_table(table_1: pd.DataFrame, table_2: pd.DataFrame) -> pd.DataFrame:
     data = pd.DataFrame()
 
@@ -103,7 +97,6 @@ def uniformity_test(uni_table: pd.DataFrame, size: int, alpha: float):
     print(f'Вывод: {conclusion}')
 
 
-# Числовые характеристики
 def statistic_analys_table(
     sample: np.ndarray, mean_theoretical: float, var_theoretical: float
 ) -> pd.DataFrame:
@@ -129,8 +122,6 @@ def statistic_analys_table(
 def reshape_20x10(sample: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(sample.reshape(20, 10))
 
-
-# График
 
 
 def plot_polygons_matplotlib(
@@ -163,7 +154,6 @@ def plot_polygons_matplotlib(
     plt.show()
 
 
-# Word
 def add_table_to_doc(doc: Document, df: pd.DataFrame, title: str):
     doc.add_heading(title, level=2)
     table = doc.add_table(rows=df.shape[0] + 1, cols=df.shape[1])
@@ -182,8 +172,6 @@ def add_table_to_doc(doc: Document, df: pd.DataFrame, title: str):
                 table.rows[i + 1].cells[j].text = str(value)
 
 
-# ==========================================
-# Генерация выборок
 max_value = 20
 probabilities = poisson_probabilities(max_value, LAM)
 sample_std = standard_method(probabilities, SAMPLE_SIZE)
@@ -202,7 +190,6 @@ uniform_table = uniformity_table(table_std, table_scipy)
 stats_std = statistic_analys_table(sample_std, LAM, LAM)
 stats_scipy = statistic_analys_table(sample_scipy, LAM, LAM)
 
-# Output
 print('=== Стандартный метод ===')
 print(np.sort(sample_std).reshape(20, 10))
 print(table_std)
@@ -225,12 +212,11 @@ print('\n=== Однородность ===')
 print(uniform_table)
 print(uniform_table.sum())
 uniformity_test(uniform_table, SAMPLE_SIZE, ALPHA)
-# График
+
 plot_polygons_matplotlib(
     table_std, table_scipy, save_path='poisson_polygon_distribution.png'
 )
 
-# Word
 doc = Document()
 add_table_to_doc(
     doc, pd.DataFrame(sample_std.reshape(20, 10)), 'Выборка (стандартный метод)'

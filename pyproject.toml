@@ -1,0 +1,13 @@
+[project]
+name = "smm-mirea"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+    "plotly>=6.6.0",
+    "python-docx>=1.2.0",
+    "scipy>=1.17.1",
+]

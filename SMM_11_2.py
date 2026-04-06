@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import math
 import scipy.stats as stats
 from docx import Document
 import matplotlib.pyplot as plt
@@ -18,8 +17,8 @@ np.set_printoptions(precision=5, suppress=True)
 
 
 # Теоретическое распределение
-def binomial_probabilities(n: int, p: float) -> list[float]:
-    return [math.comb(n, k) * p**k * (1 - p) ** (n - k) for k in range(n + 1)]
+def geom_probabilities(max_k: int, p: float) -> list[float]:
+    return [p * (1 - p) ** k for k in range(max_k + 1)]
 
 
 # Генерация выборок
@@ -28,19 +27,18 @@ def standard_method(probabilities: list[float], size: int) -> np.ndarray:
     return np.searchsorted(np.cumsum(probabilities), np.random.random(size))
 
 
-def scipy_method(n: int, p: float, size: int) -> np.ndarray:
-    return stats.binom.rvs(n, p, size=size, random_state=SEED + 1)
+def scipy_method(p: float, size: int) -> np.ndarray:
+    return stats.geom.rvs(p, size=size, random_state=SEED + 1) - 1
 
 
 # Построение статистического ряда
 def build_stat_table(
-    sample: np.ndarray, probabilities: list[float], n: int, size: int
+    sample: np.ndarray, probabilities: list[float], size: int
 ) -> pd.DataFrame:
-    counts = np.bincount(sample, minlength=n + 1)
-
+    counts = np.bincount(sample, minlength=len(probabilities))
     return pd.DataFrame(
         {
-            'x_i': np.arange(n + 1),
+            'x_i': np.arange(len(probabilities)),
             'n_i': counts,
             'w_i': counts / size,
             'p_i': probabilities,
@@ -54,7 +52,9 @@ def chi_square_table(stat_table: pd.DataFrame, size: int) -> pd.DataFrame:
     data = stat_table[['w_i', 'p_i']].copy()
 
     data['|w_i - p_i|'] = np.abs(data['w_i'] - data['p_i'])
-    data['chi criteria'] = size * (data['w_i'] - data['p_i']) ** 2 / data['p_i']
+    data['chi criteria'] = np.where(
+        data['p_i'] > 0, size * (data['w_i'] - data['p_i']) ** 2 / data['p_i'], 0
+    )
 
     return data
 
@@ -173,7 +173,7 @@ def add_table_to_doc(doc: Document, df: pd.DataFrame, title: str):
         for j in range(df.shape[1]):
             value = df.iloc[i, j]
             if pd.isna(value):
-                table.rows[i + 1].cells[j].text = ''
+                table.rows[i + 1].cells[j].text = '0'
             elif isinstance(value, (float, np.floating)):
                 table.rows[i + 1].cells[j].text = f'{float(value):.5f}'
             else:
@@ -181,26 +181,28 @@ def add_table_to_doc(doc: Document, df: pd.DataFrame, title: str):
 
 
 # ==========================================
-probabilities = binomial_probabilities(N, P)
+# Генерация выборок
+max_value = 20
+probabilities = geom_probabilities(max_value, P)
 
 sample_std = standard_method(probabilities, SAMPLE_SIZE)
-sample_scipy = scipy_method(N, P, SAMPLE_SIZE)
+sample_scipy = scipy_method(P, SAMPLE_SIZE)
 
-table_std = build_stat_table(sample_std, probabilities, N, SAMPLE_SIZE)
-table_scipy = build_stat_table(sample_scipy, probabilities, N, SAMPLE_SIZE)
-
+m = max(sample_std.max(), sample_scipy.max())
+probabilities = geom_probabilities(m, P)
+table_std = build_stat_table(sample_std, probabilities, SAMPLE_SIZE)
+table_scipy = build_stat_table(sample_scipy, probabilities, SAMPLE_SIZE)
 chi_std_table = chi_square_table(table_std, SAMPLE_SIZE)
 chi_scipy_table = chi_square_table(table_scipy, SAMPLE_SIZE)
-
 uniform_table = uniformity_table(table_std, table_scipy)
-
-stats_std = statistic_analys_table(sample_std, N * P, N * P * (1 - P))
-stats_scipy = statistic_analys_table(sample_scipy, N * P, N * P * (1 - P))
+stats_std = statistic_analys_table(sample_std, 1 / P - 1, (1 - P) / P**2)
+stats_scipy = statistic_analys_table(sample_scipy, 1 / P - 1, (1 - P) / P**2)
 
 # Output
 print('=== Стандартный метод ===')
 print(np.sort(sample_std).reshape(20, 10))
 print(table_std)
+print(table_std.sum())
 print(chi_std_table)
 print(chi_std_table.sum())
 print(stats_std)
@@ -209,6 +211,7 @@ chi_square_test(chi_std_table, ALPHA)
 print('\n=== Scipy метод ===')
 print(np.sort(sample_scipy).reshape(20, 10))
 print(table_scipy)
+print(table_scipy.sum())
 print(chi_scipy_table)
 print(chi_scipy_table.sum())
 print(stats_scipy)
@@ -216,12 +219,12 @@ chi_square_test(chi_scipy_table, ALPHA)
 
 print('\n=== Однородность ===')
 print(uniform_table)
+print(uniform_table.sum())
 uniformity_test(uniform_table, SAMPLE_SIZE, ALPHA)
-
-# print(uniform_result)
-
 # График
-plot_polygons_matplotlib(table_std, table_scipy, save_path='polygon_distribution.png')
+plot_polygons_matplotlib(
+    table_std, table_scipy, save_path='geom_polygon_distribution.png'
+)
 
 # Word
 doc = Document()
@@ -233,7 +236,6 @@ add_table_to_doc(
     pd.DataFrame(np.sort(sample_std).reshape(20, 10)),
     'Отсортированная выборка (стандартный метод)',
 )
-
 add_table_to_doc(doc, table_std, 'Статистический ряд (стандартный метод)')
 add_table_to_doc(doc, chi_std_table, 'Критерий Пирсона (стандартный метод)')
 add_table_to_doc(doc, stats_std, 'Числовые характеристики (стандартный метод)')
@@ -244,11 +246,10 @@ add_table_to_doc(
     pd.DataFrame(np.sort(sample_scipy).reshape(20, 10)),
     'Отсортированная выборка (scipy)',
 )
-
 add_table_to_doc(doc, table_scipy, 'Статистический ряд (scipy)')
 add_table_to_doc(doc, chi_scipy_table, 'Критерий Пирсона (scipy)')
 add_table_to_doc(doc, stats_scipy, 'Числовые характеристики (scipy)')
 
 add_table_to_doc(doc, uniform_table, 'Критерий однородности')
 
-doc.save('report_binom.docx')
+doc.save('report_geom.docx')
